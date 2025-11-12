@@ -36,7 +36,6 @@
             position: fixed;
             top: 70px;
             right: 20px;
-            width: 250px;
             max-height: 80vh;
             overflow-y: auto;
             background: #1e1e1e;
@@ -82,6 +81,11 @@
             color: white;
         }
 
+        #poe-seller-menu .menu-content {
+            display: flex;
+            flex-direction: column;
+        }
+
         #poe-seller-menu.minimized .menu-content {
             display: none;
         }
@@ -105,11 +109,13 @@
         #poe-seller-menu .seller-name {
             color: white;
             font-weight: bold;
+            font-size: 11px;
+            display: block;
+            margin-top: 2px;
         }
 
         #poe-seller-menu .refresh-btn {
-            width: 100%;
-            margin-top: 8px;
+            margin: 0 auto;
             padding: 4px;
             background: #444;
             color: white;
@@ -133,12 +139,34 @@
         #poe-seller-menu .seller-entry:hover {
             background: #333;
         }
+
+        #poe-seller-menu .price-good {
+            color: #4CAF50 !important;
+            font-weight: bold;
+        }
+
+        #poe-seller-menu .price-bad {
+            color: #F44336 !important;
+        }
     `
     }));
 
+    // Cookie utility functions
+    function setCookie(name, value, days = 30) {
+        const expires = new Date(Date.now() + days * 24 * 60 * 60 * 1000).toUTCString();
+        document.cookie = `${name}=${value}; expires=${expires}; path=/`;
+    }
+
+    function getCookie(name) {
+        const value = `; ${document.cookie}`;
+        const parts = value.split(`; ${name}=`);
+        if (parts.length === 2) return parts.pop().split(';').shift();
+        return null;
+    }
+
     function createSellerMenu(accountMap) {
         const oldMenu = document.getElementById('poe-seller-menu');
-        const wasMinimized = oldMenu && oldMenu.classList.contains('minimized');
+        const wasMinimized = oldMenu ? oldMenu.classList.contains('minimized') : getCookie('poe-menu-minimized') === 'true';
         if (oldMenu) oldMenu.remove();
 
         const menu = document.createElement('div');
@@ -160,6 +188,8 @@
         toggleBtn.textContent = '📦';
         toggleBtn.onclick = () => {
             menu.classList.toggle('minimized');
+            // Save state to cookie
+            setCookie('poe-menu-minimized', menu.classList.contains('minimized'));
         };
 
         header.appendChild(title);
@@ -175,12 +205,54 @@
         description.textContent = 'Click on name to teleport';
         content.appendChild(description);
 
+        // First pass: collect all prices by currency
+        const pricesByCurrency = new Map();
+        accountMap.forEach((listings, accName) => {
+            if (listings.length <= 1) return;
+
+            const firstListing = listings[0];
+            const priceSpan = firstListing.querySelector('[data-field="price"]');
+            if (priceSpan) {
+                const spans = priceSpan.querySelectorAll('span');
+                const amountSpan = spans[1];
+                const currencyImgElement = priceSpan.querySelector('.currency-image img');
+                if (amountSpan && currencyImgElement) {
+                    const amount = parseFloat(amountSpan.textContent.trim());
+                    const currency = currencyImgElement.getAttribute('title');
+                    
+                    if (!pricesByCurrency.has(currency)) {
+                        pricesByCurrency.set(currency, []);
+                    }
+                    pricesByCurrency.get(currency).push({ amount, accName });
+                }
+            }
+        });
+
+        // Calculate price thresholds for each currency
+        const priceThresholds = new Map();
+        pricesByCurrency.forEach((prices, currency) => {
+            if (prices.length < 2) return; // Need at least 2 sellers to compare
+            
+            const amounts = prices.map(p => p.amount).sort((a, b) => a - b);
+            const minPrice = amounts[0];
+            const maxPrice = amounts[amounts.length - 1];
+            const priceRange = maxPrice - minPrice;
+            
+            // Good deal: bottom 30% of price range
+            // Bad deal: top 30% of price range
+            const goodThreshold = minPrice + (priceRange * 0.3);
+            const badThreshold = maxPrice - (priceRange * 0.3);
+            
+            priceThresholds.set(currency, { good: goodThreshold, bad: badThreshold });
+        });
+
         accountMap.forEach((listings, accName) => {
             if (listings.length <= 1) return;
 
             // Get the price from the first listing
             let priceText = '';
             let currencyImg = null;
+            let priceClass = '';
             const firstListing = listings[0];
             const priceSpan = firstListing.querySelector('[data-field="price"]');
             if (priceSpan) {
@@ -188,9 +260,20 @@
                 const amountSpan = spans[1]; // Second span is the price amount
                 const currencyImgElement = priceSpan.querySelector('.currency-image img');
                 if (amountSpan && currencyImgElement) {
-                    const amount = amountSpan.textContent.trim();
+                    const amount = parseFloat(amountSpan.textContent.trim());
                     const currency = currencyImgElement.getAttribute('title');
-                    priceText = ` @ ${amount} ${currency}`;
+                    priceText = ` @ ${amountSpan.textContent.trim()} ${currency}`;
+                    
+                    // Determine price class based on thresholds
+                    const threshold = priceThresholds.get(currency);
+                    if (threshold) {
+                        if (amount <= threshold.good) {
+                            priceClass = 'price-good';
+                        } else if (amount >= threshold.bad) {
+                            priceClass = 'price-bad';
+                        }
+                    }
+                    
                     // Clone the currency image for display
                     currencyImg = currencyImgElement.cloneNode(true);
                     currencyImg.style.cssText = 'width: 16px; height: 16px; margin-left: 4px; vertical-align: middle;';
@@ -209,19 +292,41 @@
                 }
             };
 
-            const nameSpan = document.createElement('span');
-            nameSpan.className = 'seller-name';
-            nameSpan.textContent = accName;
-            entry.appendChild(nameSpan);
-
             const infoSpan = document.createElement('span');
-            infoSpan.textContent = ` (${listings.length} items)${priceText}`;
+            infoSpan.textContent = `${listings.length} items @ `;
             entry.appendChild(infoSpan);
+
+            // Add price amount with color coding
+            if (priceText) {
+                const priceMatch = priceText.match(/ @ (\d+(?:\.\d+)?)\s*(.+)/);
+                if (priceMatch) {
+                    const priceAmount = document.createElement('span');
+                    priceAmount.textContent = priceMatch[1];
+                    if (priceClass) {
+                        priceAmount.className = priceClass;
+                    }
+                    entry.appendChild(priceAmount);
+
+                    const currencyText = document.createElement('span');
+                    currencyText.textContent = ` ${priceMatch[2]}`;
+                    entry.appendChild(currencyText);
+                } else {
+                    const fullPrice = document.createElement('span');
+                    fullPrice.textContent = priceText;
+                    entry.appendChild(fullPrice);
+                }
+            }
 
             // Add currency image if available
             if (currencyImg) {
                 entry.appendChild(currencyImg);
             }
+
+            // Add account name on new line
+            const nameSpan = document.createElement('span');
+            nameSpan.className = 'seller-name';
+            nameSpan.textContent = accName;
+            entry.appendChild(nameSpan);
 
             content.appendChild(entry);
         });
