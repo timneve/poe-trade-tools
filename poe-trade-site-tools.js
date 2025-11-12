@@ -107,11 +107,16 @@
         }
 
         #poe-seller-menu .seller-name {
-            color: white;
+            color: #e9cf9f;
             font-weight: bold;
             font-size: 11px;
             display: block;
             margin-top: 2px;
+        }
+
+        #poe-seller-menu .item-count {
+            color: white;
+            font-weight: bold;
         }
 
         #poe-seller-menu .refresh-btn {
@@ -293,7 +298,7 @@
             };
 
             const infoSpan = document.createElement('span');
-            infoSpan.textContent = `${listings.length} items @ `;
+            infoSpan.innerHTML = `<span class="item-count">${listings.length}</span> items @ `;
             entry.appendChild(infoSpan);
 
             // Add price amount with color coding
