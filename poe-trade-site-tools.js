@@ -9,7 +9,7 @@
 // @grant        none
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // Inject custom CSS
@@ -34,7 +34,7 @@
 
         #poe-seller-menu {
             position: fixed;
-            top: 100px;
+            top: 70px;
             right: 20px;
             width: 250px;
             max-height: 80vh;
@@ -46,6 +46,48 @@
             z-index: 9999;
             font-size: 13px;
             font-family: sans-serif;
+            transition: width 0.3s ease;
+        }
+
+        #poe-seller-menu.minimized {
+            width: 40px;
+            height: 40px;
+            padding: 8px;
+            overflow: hidden;
+        }
+
+        #poe-seller-menu .menu-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+        }
+
+        #poe-seller-menu.minimized .menu-header {
+            width: 20px;
+            height: 20px;
+        }
+
+        #poe-seller-menu .toggle-btn {
+            background: none;
+            border: none;
+            color: #e9cf9f;
+            font-size: 16px;
+            cursor: pointer;
+            padding: 0;
+            line-height: 1;
+        }
+
+        #poe-seller-menu .toggle-btn:hover {
+            color: white;
+        }
+
+        #poe-seller-menu.minimized .menu-content {
+            display: none;
+        }
+
+        #poe-seller-menu.minimized .menu-title {
+            display: none;
         }
 
         #poe-seller-menu .menu-title {
@@ -96,36 +138,62 @@
 
     function createSellerMenu(accountMap) {
         const oldMenu = document.getElementById('poe-seller-menu');
+        const wasMinimized = oldMenu && oldMenu.classList.contains('minimized');
         if (oldMenu) oldMenu.remove();
 
         const menu = document.createElement('div');
         menu.id = 'poe-seller-menu';
+        if (wasMinimized) {
+            menu.classList.add('minimized');
+        }
+
+        // Header with title and toggle button
+        const header = document.createElement('div');
+        header.className = 'menu-header';
 
         const title = document.createElement('div');
         title.className = 'menu-title';
-        title.textContent = '📦 Bulk Sellers';
-        menu.appendChild(title);
+        title.textContent = 'Bulk Sellers';
+
+        const toggleBtn = document.createElement('button');
+        toggleBtn.className = 'toggle-btn';
+        toggleBtn.textContent = '📦';
+        toggleBtn.onclick = () => {
+            menu.classList.toggle('minimized');
+        };
+
+        header.appendChild(title);
+        header.appendChild(toggleBtn);
+        menu.appendChild(header);
+
+        // Menu content (everything except the header)
+        const content = document.createElement('div');
+        content.className = 'menu-content';
 
         const description = document.createElement('div');
         description.className = 'menu-description';
-        description.textContent = 'Click on name to teleport, scroll page/load more to find more listing.';
-        menu.appendChild(description);
+        description.textContent = 'Click on name to teleport';
+        content.appendChild(description);
 
         accountMap.forEach((listings, accName) => {
             if (listings.length <= 1) return;
 
             // Get the price from the first listing
             let priceText = '';
+            let currencyImg = null;
             const firstListing = listings[0];
             const priceSpan = firstListing.querySelector('[data-field="price"]');
             if (priceSpan) {
                 const spans = priceSpan.querySelectorAll('span');
                 const amountSpan = spans[1]; // Second span is the price amount
-                const currencyImg = priceSpan.querySelector('img');
-                if (amountSpan && currencyImg) {
+                const currencyImgElement = priceSpan.querySelector('.currency-image img');
+                if (amountSpan && currencyImgElement) {
                     const amount = amountSpan.textContent.trim();
-                    const currency = currencyImg.getAttribute('title');
+                    const currency = currencyImgElement.getAttribute('title');
                     priceText = ` @ ${amount} ${currency}`;
+                    // Clone the currency image for display
+                    currencyImg = currencyImgElement.cloneNode(true);
+                    currencyImg.style.cssText = 'width: 16px; height: 16px; margin-left: 4px; vertical-align: middle;';
                 }
             }
 
@@ -150,15 +218,21 @@
             infoSpan.textContent = ` (${listings.length} items)${priceText}`;
             entry.appendChild(infoSpan);
 
-            menu.appendChild(entry);
+            // Add currency image if available
+            if (currencyImg) {
+                entry.appendChild(currencyImg);
+            }
+
+            content.appendChild(entry);
         });
 
         const refreshBtn = document.createElement('button');
         refreshBtn.className = 'refresh-btn';
         refreshBtn.textContent = '🔄 Refresh Listings';
         refreshBtn.onclick = () => groupListingsAndShowMenu();
-        menu.appendChild(refreshBtn);
+        content.appendChild(refreshBtn);
 
+        menu.appendChild(content);
         document.body.appendChild(menu);
     }
 
@@ -174,7 +248,7 @@
             let accName = accSpan.textContent.trim();
             // Remove existing badge pattern like "(3 items)" from the account name
             accName = accName.replace(/\(\d+\s+items?\)/g, '').trim();
-            
+
             if (!accName) return;
 
             if (!accountMap.has(accName)) {
