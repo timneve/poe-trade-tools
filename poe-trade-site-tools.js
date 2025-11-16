@@ -153,6 +153,15 @@
         #poe-seller-menu .price-bad {
             color: #F44336 !important;
         }
+
+        #poe-seller-menu .seller-entry.teleported {
+            opacity: 0.4;
+            background-color: #2a2a2a;
+        }
+
+        #poe-seller-menu .seller-entry.teleported:hover {
+            opacity: 0.6;
+        }
     `
     }));
 
@@ -292,6 +301,8 @@
                     const teleportBtn = listing.querySelector('.direct-btn');
                     if (teleportBtn && teleportBtn.textContent.includes('Travel')) {
                         teleportBtn.click();
+                        // Mark as teleported
+                        entry.classList.add('teleported');
                         break;
                     }
                 }
