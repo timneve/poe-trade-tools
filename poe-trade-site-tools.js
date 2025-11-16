@@ -178,6 +178,9 @@
         return null;
     }
 
+    // Track teleported sellers with their item counts
+    let teleportedSellers = new Map();
+
     function createSellerMenu(accountMap) {
         const oldMenu = document.getElementById('poe-seller-menu');
         const wasMinimized = oldMenu ? oldMenu.classList.contains('minimized') : getCookie('poe-menu-minimized') === 'true';
@@ -296,13 +299,21 @@
 
             const entry = document.createElement('div');
             entry.className = 'seller-entry';
+            
+            // Check if this seller was previously teleported with same item count
+            const teleportedData = teleportedSellers.get(accName);
+            if (teleportedData && teleportedData.count === listings.length) {
+                entry.classList.add('teleported');
+            }
+            
             entry.onclick = () => {
                 for (const listing of listings) {
                     const teleportBtn = listing.querySelector('.direct-btn');
                     if (teleportBtn && teleportBtn.textContent.includes('Travel')) {
                         teleportBtn.click();
-                        // Mark as teleported
+                        // Mark as teleported with current item count
                         entry.classList.add('teleported');
+                        teleportedSellers.set(accName, { count: listings.length, teleported: true });
                         break;
                     }
                 }
@@ -350,7 +361,10 @@
         const refreshBtn = document.createElement('button');
         refreshBtn.className = 'refresh-btn';
         refreshBtn.textContent = '🔄 Refresh Listings';
-        refreshBtn.onclick = () => groupListingsAndShowMenu();
+        refreshBtn.onclick = () => {
+            teleportedSellers.clear(); // Clear teleported state on manual refresh
+            groupListingsAndShowMenu();
+        };
         content.appendChild(refreshBtn);
 
         menu.appendChild(content);
